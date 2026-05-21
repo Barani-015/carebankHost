@@ -1,21 +1,12 @@
-const express = require('express');
-const path = require('path');
+// ✅ Line 1 — must be before everything
 require('dotenv').config();
+
+const express = require('express');
+const mongoose = require('mongoose');
+const path = require('path');
 const fs = require('fs');
 const json2csv = require('json2csv').parse;
 const User = require('./models/User');
-
-require('dotenv').config();
-
-// DEBUG: Check if MONGODB_URI is loaded
-console.log('🔍 MONGODB_URI exists:', !!process.env.MONGODB_URI);
-if (!process.env.MONGODB_URI) {
-    console.error('❌ MONGODB_URI not found in .env file!');
-    console.log('Current working directory:', __dirname);
-    console.log('Looking for .env at:', require('path').join(__dirname, '.env'));
-}
-
-// Import configurations - NOTE: Use object destructuring
 const { connectDB, initializeDatabase } = require('./config/database');
 
 // Import middleware
@@ -35,6 +26,8 @@ const aiRoutes = require('./routes/aiRoutes');
 const fileRoutes = require('./routes/fileRoutes');
 
 const app = express();
+
+
 
 // ========== GLOBAL VARIABLES ==========
 const UPLOADS_CSV_DIR = 'uploadsCSVs'; // Global directory name

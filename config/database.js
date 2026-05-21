@@ -1,3 +1,7 @@
+const dns = require('dns');
+dns.setDefaultResultOrder('ipv4first');
+dns.setServers(['8.8.8.8', '8.8.4.4']);
+
 const mongoose = require('mongoose');
 const User = require('../models/User');
 const Subscription = require('../models/Subscription');
@@ -8,12 +12,10 @@ const { PLAN_MAP } = require('./plans');
 
 const connectDB = async () => {
   try {
-    await mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/carebank', {
-      useNewUrlParser: true,
-      useUnifiedTopology: true
+    await mongoose.connect(process.env.MONGO_URI, {
+      dbName: 'carebank'
     });
-    // await mongoose.connect(process.env.MONGODB_URI);
-
+    // await mongoose.connect(process.env.MONGO_URI, { dbName: 'carebank' });
     console.log('✅ MongoDB Connected to carebank database');
     return mongoose.connection;
   } catch (error) {
@@ -21,7 +23,6 @@ const connectDB = async () => {
     throw error;
   }
 };
-
 const initializeDatabase = async () => {
   try {
     // Check if coupons exist
