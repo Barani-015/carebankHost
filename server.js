@@ -27,6 +27,8 @@ const fileRoutes = require('./routes/fileRoutes');
 
 const app = express();
 
+app.set('trust proxy', 1);
+
 
 
 // ========== GLOBAL VARIABLES ==========
@@ -37,6 +39,12 @@ const BASE_UPLOAD_DIR = path.join(__dirname, UPLOADS_CSV_DIR);
 if (!fs.existsSync(BASE_UPLOAD_DIR)) {
     fs.mkdirSync(BASE_UPLOAD_DIR, { recursive: true });
     console.log(`📁 Created base upload directory: ${UPLOADS_CSV_DIR}`);
+}
+
+if (process.env.NODE_ENV === 'production') {
+    console.log('⚠️ WARNING: Render uses ephemeral storage!');
+    console.log(`📁 Files saved in ${UPLOADS_CSV_DIR} will be DELETED on every restart/deploy`);
+    console.log('💡 For production data persistence, use cloud storage (S3, Cloudinary, or MongoDB GridFS)');
 }
 
 // Helper function to get user directory
@@ -105,10 +113,12 @@ app.get('/api/test', (req, res) => {
 app.get('/api/ai/test-python', async (req, res) => {
     try {
         const axios = require('axios');
-        const response = await axios.get('http://localhost:5000/health');
+        // Use environment variable for Python service URL
+        const pythonServiceUrl = process.env.PYTHON_SERVICE_URL || 'http://carebank-ai:5000';
+        const response = await axios.get(`${pythonServiceUrl}/health`);
         res.json({ success: true, pythonService: response.data });
     } catch (error) {
-        res.json({ success: false, error: 'Python service not running on port 5000' });
+        res.json({ success: false, error: 'Python service not available' });
     }
 });
 
