@@ -109,12 +109,12 @@ app.get('/api/test', (req, res) => {
     res.json({ success: true, message: 'Server is running!', timestamp: new Date().toISOString() });
 });
 
+const pythonServiceUrl = process.env.PYTHON_SERVICE_URL || 'https://carebank-ai.onrender.com';
 // Test endpoint to check Python service connection
 app.get('/api/ai/test-python', async (req, res) => {
     try {
         const axios = require('axios');
         // Use environment variable for Python service URL
-        const pythonServiceUrl = process.env.PYTHON_SERVICE_URL || 'https://carebank-ai.onrender.com';
         const response = await axios.get(`${pythonServiceUrl}/health`);
         res.json({ success: true, pythonService: response.data });
     } catch (error) {

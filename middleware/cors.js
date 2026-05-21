@@ -45,6 +45,7 @@ const corsMiddleware = cors({
     
     const allowedOrigins = [
       'https://carebankhost-1.onrender.com',
+      'https://carebank-ai.onrender.com',
       'http://localhost:3000',
       'http://localhost:5000'
     ];
