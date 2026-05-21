@@ -1,0 +1,11 @@
+{
+  "user_email": "demo@carebank.com",
+  "user_uuid": "69ddec0ea6caed6e9922a769",
+  "folder_name": "69ddec0ea6caed6e9922a769",
+  "token_user_id": "69ddec0ea6caed6e9922a769",
+  "timestamp": "2026-05-13T16:41:38.373Z",
+  "total_messages": 7,
+  "financial_transactions": 7,
+  "ignored_messages": 0,
+  "csv_file": "transactions_2026-05-13_22-11-38.csv"
+}

@@ -1,0 +1,38 @@
+{
+  "6a043eb77650695f5d80f638": {
+    "email": "jayabarani8116@gmail.com",
+    "uuid": "6a043eb77650695f5d80f638",
+    "device_id": "web_browser",
+    "device_name": "Mozilla/5.0 (Linux; Android 15; V2356 Build/AP3A.240905.015.A2; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/147.0.7727.138 Mobile Safari/537.36",
+    "folder_name": "6a043eb77650695f5d80f638",
+    "last_registered": "2026-05-13T17:33:07.325Z",
+    "registration_count": 1
+  },
+  "6a04b9b156c9faaad1f3c036": {
+    "email": "jayabarani8116@gmail.com",
+    "uuid": "6a04b9b156c9faaad1f3c036",
+    "device_id": "web_browser",
+    "device_name": "Mozilla/5.0 (Linux; Android 15; V2356 Build/AP3A.240905.015.A2; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/147.0.7727.138 Mobile Safari/537.36",
+    "folder_name": "6a04b9b156c9faaad1f3c036",
+    "last_registered": "2026-05-14T03:44:49.896Z",
+    "registration_count": 4
+  },
+  "6a06816144ec2e06545d16ba": {
+    "email": "velu.mca21@gmail.com",
+    "uuid": "6a06816144ec2e06545d16ba",
+    "device_id": "web_browser",
+    "device_name": "Mozilla/5.0 (Linux; Android 16; CPH2707 Build/UKQ1.231108.001; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/147.0.7727.137 Mobile Safari/537.36",
+    "folder_name": "6a06816144ec2e06545d16ba",
+    "last_registered": "2026-05-15T02:14:09.166Z",
+    "registration_count": 1
+  },
+  "6a0e974a96c805a4a1acef60": {
+    "email": "jayabarani8116@gmail.com",
+    "uuid": "6a0e974a96c805a4a1acef60",
+    "device_id": "web_browser",
+    "device_name": "Mozilla/5.0 (Linux; Android 15; V2356 Build/AP3A.240905.015.A2; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/148.0.7778.120 Mobile Safari/537.36",
+    "folder_name": "6a0e974a96c805a4a1acef60",
+    "last_registered": "2026-05-21T05:25:54.955Z",
+    "registration_count": 1
+  }
+}

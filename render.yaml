@@ -1,0 +1,14 @@
+services:
+  - type: web
+    name: carebank-backend
+    env: node
+    plan: free
+    buildCommand: npm install
+    startCommand: ./start.bat
+    envVars:
+      - key: MONGODB_URI
+        fromDatabase: false
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000

@@ -1,0 +1,10 @@
+{
+  "user_email": null,
+  "user_uuid": null,
+  "folder_name": "unknown_user",
+  "timestamp": "2026-05-13T16:13:48.083Z",
+  "total_messages": 3322,
+  "financial_transactions": 303,
+  "ignored_messages": 3019,
+  "csv_file": "transactions_2026-05-13_21-43-48.csv"
+}

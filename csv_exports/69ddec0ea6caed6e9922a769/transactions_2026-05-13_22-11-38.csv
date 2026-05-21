@@ -1,0 +1,8 @@
+timestamp,sender,transaction_type,amount,merchant,category,user_email,user_uuid,message
+2026-05-13T15:41:36.334Z,HDFC-Bank,debit,1250,Swiggy,Food & Dining,demo@carebank.com,69ddec0ea6caed6e9922a769,"Rs.1,250 spent on Swiggy. Avl bal: 12,450"
+2026-05-12T16:41:36.334Z,ICICI-Bank,credit,45000,Other,Income,demo@carebank.com,69ddec0ea6caed6e9922a769,"Rs.45,000 credited as Salary for May 2026"
+2026-05-11T16:41:36.334Z,Amazon,debit,2399,Amazon,Shopping,demo@carebank.com,69ddec0ea6caed6e9922a769,"Rs.2,399 spent on Amazon.in Order OD123456789"
+2026-05-10T16:41:36.334Z,Axis-Bank,debit,899,Netflix,Entertainment,demo@carebank.com,69ddec0ea6caed6e9922a769,Rs.899 spent on Netflix subscription renewal
+2026-05-09T16:41:36.334Z,PhonePe,debit,350,Uber,Transport,demo@carebank.com,69ddec0ea6caed6e9922a769,Rs.350 spent on Uber ride
+2026-05-08T16:41:36.334Z,Zomato,debit,450,Other,Other,demo@carebank.com,69ddec0ea6caed6e9922a769,Rs.450 spent on food order
+2026-05-07T16:41:36.334Z,BESCOM,debit,1500,Electricity Bill,Utilities,demo@carebank.com,69ddec0ea6caed6e9922a769,"Rs.1,500 Electricity bill paid successfully"
