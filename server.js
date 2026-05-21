@@ -116,6 +116,8 @@ app.get('/api/ai/test-python', async (req, res) => {
         const axios = require('axios');
         // Use environment variable for Python service URL
         const response = await axios.get(`${pythonServiceUrl}/health`);
+        console.log(pythonServiceUrl);
+        console.log('✅ Python service response:', response.data);
         res.json({ success: true, pythonService: response.data });
     } catch (error) {
         res.json({ success: false, error: 'Python service not available' });
