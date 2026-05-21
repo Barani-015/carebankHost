@@ -114,7 +114,7 @@ app.get('/api/ai/test-python', async (req, res) => {
     try {
         const axios = require('axios');
         // Use environment variable for Python service URL
-        const pythonServiceUrl = process.env.PYTHON_SERVICE_URL || 'http://carebank-ai:5000';
+        const pythonServiceUrl = process.env.PYTHON_SERVICE_URL || 'https://carebank-ai.onrender.com';
         const response = await axios.get(`${pythonServiceUrl}/health`);
         res.json({ success: true, pythonService: response.data });
     } catch (error) {
