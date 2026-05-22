@@ -13,6 +13,7 @@ const fs = require('fs');
 const json2csv = require('json2csv').parse;
 const User = require('./models/User');
 const { connectDB, initializeDatabase } = require('./config/database');
+const { initGridFS } = require('./config/gridfs');
 
 
 // Import middleware
@@ -724,6 +725,7 @@ const HOST = process.env.HOST || '0.0.0.0';
 // Connect to database and start server
 connectDB().then(async () => {
     await initializeDatabase();
+    initGridFS()
     
     // Get local network IP addresses
     const networkInterfaces = require('os').networkInterfaces();

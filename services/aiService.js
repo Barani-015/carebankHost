@@ -10,6 +10,7 @@ const express = require('express');
 const cors    = require('cors');
 const fs      = require('fs');
 const path    = require('path');
+const { listUserCSVs, downloadCSV } = require('./csvStorage');
 
 const router = express.Router();   // ← use as a router inside your main app
 // OR run standalone:  const app = express(); app.use(router); app.listen(5000);
@@ -83,29 +84,24 @@ function splitCSVLine(line) {
  * Load all CSV files for a user and return { filename: rows[] }.
  * Throws if the user folder does not exist.
  */
-function loadUserCSVFiles(userId) {
-    const userFolder = path.join(UPLOAD_CSV_FOLDER, String(userId));
+async function loadUserCSVFiles(userId) {
+    console.log(`📂 Loading CSV files from MongoDB for user: ${userId}`);
 
-    if (!fs.existsSync(userFolder)) {
-        const available = fs.existsSync(UPLOAD_CSV_FOLDER)
-            ? fs.readdirSync(UPLOAD_CSV_FOLDER).filter(f =>
-                fs.statSync(path.join(UPLOAD_CSV_FOLDER, f)).isDirectory())
-            : [];
-        throw new Error(`User folder "${userId}" not found. Available: [${available.join(', ')}]`);
+    const files = await listUserCSVs(userId);
+
+    if (!files || files.length === 0) {
+        throw new Error(`No CSV files found for user: ${userId}`);
     }
 
     const csvData = {};
-    const files   = fs.readdirSync(userFolder).filter(f => f.endsWith('.csv'));
-
-    console.log(`📂 Found ${files.length} CSV files for user: ${userId}`);
 
     for (const file of files) {
         try {
-            const content = fs.readFileSync(path.join(userFolder, file), 'utf8');
-            csvData[file]  = parseCSV(content);
-            console.log(`   ✅ Loaded: ${file} (${csvData[file].length} rows)`);
+            const content  = await downloadCSV(file.id);
+            csvData[file.filename] = parseCSV(content);
+            console.log(`   ✅ Loaded: ${file.filename} (${csvData[file.filename].length} rows)`);
         } catch (err) {
-            console.warn(`   ⚠️ Could not read ${file}: ${err.message}`);
+            console.warn(`   ⚠️ Could not read ${file.filename}: ${err.message}`);
         }
     }
 
@@ -115,7 +111,7 @@ function loadUserCSVFiles(userId) {
 /**
  * Return cached CSV data, or load fresh if stale/missing.
  */
-function getCachedCSVData(userId) {
+async function getCachedCSVData(userId) {
     const now   = Date.now();
     const entry = CSV_CACHE[userId];
 
@@ -124,8 +120,8 @@ function getCachedCSVData(userId) {
         return entry.data;
     }
 
-    console.log(`🔄 CACHE MISS — Loading fresh data for user: ${userId}`);
-    const data = loadUserCSVFiles(userId);
+    console.log(`🔄 CACHE MISS — Loading from MongoDB for user: ${userId}`);
+    const data = await loadUserCSVFiles(userId);
     CSV_CACHE[userId] = { data, timestamp: now };
     return data;
 }
@@ -329,7 +325,9 @@ async function queryAIWithCSV(userId, question) {
 
     try {
         // 1. Load (cached) CSV data
-        const csvData = getCachedCSVData(userId);
+        // const csvData = getCachedCSVData(userId);
+
+        const csvData = await getCachedCSVData(userId);
 
         // 2. Build context
         const context = buildContext(csvData, question);
