@@ -10,15 +10,17 @@ const initGridFSBucket = () => {
         gfsBucket = new GridFSBucket(conn.db, {
             bucketName: 'csvFiles'  // Your bucket name from the screenshot
         });
-        console.log('✅ GridFS bucket initialized');
+        console.log('✅ GridFS bucket initialized for csvFiles');
     }
 };
 
 // Get all CSV files for a user
 const getUserCSVFiles = async (userId) => {
     try {
+        if (!gfsBucket) initGridFSBucket();
+        
         const files = await gfsBucket.find({ 
-            'metadata.userId': userId 
+            'metadata.userId': userId.toString() 
         }).toArray();
         
         return files.map(file => ({
@@ -38,6 +40,8 @@ const getUserCSVFiles = async (userId) => {
 // Read CSV file content from GridFS
 const readCSVFile = async (fileId) => {
     return new Promise((resolve, reject) => {
+        if (!gfsBucket) initGridFSBucket();
+        
         const chunks = [];
         const downloadStream = gfsBucket.openDownloadStream(fileId);
         
@@ -60,15 +64,17 @@ const readCSVFile = async (fileId) => {
 // Parse CSV content to JSON
 const parseCSVContent = (csvContent) => {
     const lines = csvContent.split('\n');
-    const headers = lines[0].split(',');
+    if (lines.length < 2) return [];
+    
+    const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, ''));
     const transactions = [];
     
     for (let i = 1; i < lines.length; i++) {
         if (lines[i].trim()) {
-            const values = lines[i].split(',');
+            const values = lines[i].split(',').map(v => v.trim().replace(/"/g, ''));
             const transaction = {};
             headers.forEach((header, index) => {
-                transaction[header.trim()] = values[index]?.trim() || '';
+                transaction[header] = values[index] || '';
             });
             transactions.push(transaction);
         }
@@ -84,9 +90,14 @@ const getAllUserTransactionsFromGridFS = async (userId) => {
         let allTransactions = [];
         
         for (const file of files) {
-            const csvContent = await readCSVFile(file.id);
-            const transactions = parseCSVContent(csvContent);
-            allTransactions = [...allTransactions, ...transactions];
+            try {
+                const csvContent = await readCSVFile(file.id);
+                const transactions = parseCSVContent(csvContent);
+                allTransactions = [...allTransactions, ...transactions];
+                console.log(`Read ${transactions.length} transactions from ${file.filename}`);
+            } catch (err) {
+                console.error(`Error reading file ${file.filename}:`, err);
+            }
         }
         
         return allTransactions;
@@ -98,7 +109,9 @@ const getAllUserTransactionsFromGridFS = async (userId) => {
 
 // Get a specific CSV file as downloadable
 const downloadCSVFile = async (fileId, res) => {
-    try {
+    return new Promise((resolve, reject) => {
+        if (!gfsBucket) initGridFSBucket();
+        
         const downloadStream = gfsBucket.openDownloadStream(fileId);
         
         res.setHeader('Content-Type', 'text/csv');
@@ -107,16 +120,20 @@ const downloadCSVFile = async (fileId, res) => {
         downloadStream.pipe(res);
         
         downloadStream.on('error', (error) => {
-            res.status(404).json({ error: 'File not found' });
+            reject(error);
         });
-    } catch (error) {
-        throw error;
-    }
+        
+        downloadStream.on('end', () => {
+            resolve();
+        });
+    });
 };
 
 // Save CSV string to GridFS
 const saveCSVToGridFS = async (csvContent, filename, metadata = {}) => {
     return new Promise((resolve, reject) => {
+        if (!gfsBucket) initGridFSBucket();
+        
         const uploadStream = gfsBucket.openUploadStream(filename, {
             contentType: 'text/csv',
             metadata: metadata

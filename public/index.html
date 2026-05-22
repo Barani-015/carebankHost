@@ -1411,6 +1411,7 @@ function normalizePlan(sub) {
 async function loadTransactions() {
     try {
         console.log('🔄 Loading transactions...');
+        // Change from '/transactions' to '/api/transactions'
         const res = await apiGet('/transactions');
         console.log('📊 RAW API Response:', JSON.stringify(res.transactions?.slice(0, 3), null, 2));
         
