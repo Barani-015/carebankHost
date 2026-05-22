@@ -137,6 +137,18 @@ app.get('/health', (req, res) => {
     });
 });
 
+app.get('/api/debug/folders', (req, res) => {
+    const uploadsPath = path.join(__dirname, 'uploadsCSVs');
+    const exists = fs.existsSync(uploadsPath);
+    const folders = exists ? fs.readdirSync(uploadsPath) : [];
+    res.json({
+        uploadsPath,
+        exists,
+        folders,
+        totalFolders: folders.length
+    });
+});
+
 // ============================================
 // DEVICE REGISTRATION ENDPOINT
 // ============================================
