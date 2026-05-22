@@ -1,5 +1,6 @@
 const Transaction = require('../models/Transaction');
-const { getAllUserTransactionsFromGridFS, readCSVFile, parseCSVContent } = require('../services/gridfsService');
+const { getAllUserTransactionsFromGridFS, readCSVFile, parseCSVContent, getUserCSVFiles, downloadCSVFile } = require('../services/gridfsService');
+const mongoose = require('mongoose');
 
 const getTransactions = async (req, res) => {
     try {
@@ -60,10 +61,86 @@ const getTransactions = async (req, res) => {
     }
 };
 
-// New endpoint to list all CSV files in GridFS
+// ADD THIS FUNCTION - Import transactions from CSV/JSON
+const importTransactions = async (req, res) => {
+    try {
+        const { transactions, fileId } = req.body;
+
+        console.log('Importing transactions:', transactions?.length || 0, 'transactions');
+        
+        if (!transactions || !Array.isArray(transactions)) {
+            return res.status(400).json({ success: false, message: 'Invalid transactions data' });
+        }
+        
+        const importedTransactions = [];
+        for (const tx of transactions) {
+            const transactionData = {
+                userId: req.user._id,
+                name: tx.name || tx.description || tx.merchant || 'Transaction',
+                amount: tx.amount || 0,
+                date: tx.date || new Date().toLocaleDateString(),
+                category: tx.category || 'Other',
+                type: tx.type && ['credit', 'debit'].includes(tx.type) ? tx.type : 'debit',
+                status: tx.status || 'success',
+                userEmail: req.user.email || tx.userEmail,
+                userUuid: req.user.uuid || tx.userUuid
+            };
+
+            console.log('Saving transaction:', transactionData);
+            
+            // Only add fileId if provided (optional)
+            if (fileId) {
+                transactionData.fileId = fileId;
+            }
+            
+            const transaction = new Transaction(transactionData);
+            const saved = await transaction.save();
+            importedTransactions.push(saved);
+        }
+        
+        res.json({
+            success: true,
+            transactions: importedTransactions,
+            importedCount: importedTransactions.length
+        });
+    } catch (error) {
+        console.error('Import transactions error:', error);
+        res.status(500).json({ success: false, message: 'Server error', error: error.message });
+    }
+};
+
+// ADD THIS FUNCTION - Create a single transaction
+const createTransaction = async (req, res) => {
+    try {
+        const transactionData = {
+            userId: req.user._id,
+            name: req.body.name || req.body.description || 'Transaction',
+            amount: req.body.amount || 0,
+            date: req.body.date || new Date().toLocaleDateString(),
+            category: req.body.category || 'Other',
+            type: req.body.type && ['credit', 'debit'].includes(req.body.type) ? req.body.type : 'debit',
+            status: req.body.status || 'success',
+            userEmail: req.user.email || req.body.userEmail,
+            userUuid: req.user.uuid || req.body.userUuid
+        };
+        
+        // If fileId is provided, use it
+        if (req.body.fileId) {
+            transactionData.fileId = req.body.fileId;
+        }
+        
+        const transaction = new Transaction(transactionData);
+        const saved = await transaction.save();
+        res.json({ success: true, transaction: saved });
+    } catch (error) {
+        console.error('Create transaction error:', error);
+        res.status(500).json({ success: false, message: 'Server error', error: error.message });
+    }
+};
+
+// List all CSV files in GridFS
 const listCSVFiles = async (req, res) => {
     try {
-        const { getUserCSVFiles } = require('../services/gridfsService');
         const files = await getUserCSVFiles(req.user._id);
         
         res.json({
@@ -72,14 +149,14 @@ const listCSVFiles = async (req, res) => {
             count: files.length
         });
     } catch (error) {
+        console.error('List CSV files error:', error);
         res.status(500).json({ success: false, message: error.message });
     }
 };
 
-// New endpoint to download a specific CSV file from GridFS
+// Download a specific CSV file from GridFS
 const downloadCSV = async (req, res) => {
     try {
-        const { downloadCSVFile } = require('../services/gridfsService');
         const fileId = req.params.fileId;
         
         if (!mongoose.Types.ObjectId.isValid(fileId)) {
@@ -95,8 +172,8 @@ const downloadCSV = async (req, res) => {
 
 module.exports = { 
     getTransactions, 
-    importTransactions, 
-    createTransaction,
+    importTransactions,   // NOW DEFINED ✅
+    createTransaction,    // NOW DEFINED ✅
     listCSVFiles,
     downloadCSV
 };
