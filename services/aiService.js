@@ -473,7 +473,6 @@ router.get('/provider/status', (_req, res) => {
 // ============================================
 // Export (used as a router in server.js)
 // ============================================
-module.exports = router;
 
 // ============================================
 // Standalone mode  (node aiService.js)
@@ -481,13 +480,13 @@ module.exports = router;
 if (require.main === module) {
     const app  = express();
     const PORT = process.env.AI_PORT || 5000;
-
+    
     app.use(cors());
     app.use(express.json({ limit: '10mb' }));
     app.use('/', router);
 
     fs.mkdirSync(UPLOAD_CSV_FOLDER, { recursive: true });
-
+    
     app.listen(PORT, '0.0.0.0', () => {
         console.log('\n' + '='.repeat(70));
         console.log('🚀 CareBank AI Service (Node.js) Starting');
@@ -507,3 +506,4 @@ if (require.main === module) {
         console.log('='.repeat(70) + '\n');
     });
 }
+module.exports = router;
