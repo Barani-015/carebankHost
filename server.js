@@ -15,6 +15,7 @@ const User = require('./models/User');
 const { connectDB, initializeDatabase } = require('./config/database');
 const { initGridFS } = require('./config/gridfs');
 const { initGridFSBucket } = require('./services/gridfsService');
+const Transaction = require('./models/Transaction')
 
 
 // Import middleware
