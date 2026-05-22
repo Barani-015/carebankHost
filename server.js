@@ -250,6 +250,25 @@ app.post('/api/devices/register', async (req, res) => {
 // ============================================
 // SMS BATCH ENDPOINT
 // ============================================
+// Add this import at the top of server.js (with other imports)
+
+// Then find your /api/sms/batch endpoint and replace the MongoDB saving section with this:
+
+// Add this to server.js for debugging
+app.get('/api/debug/transactions-count', async (req, res) => {
+    try {
+        const count = await Transaction.countDocuments();
+        const sample = await Transaction.findOne();
+        res.json({
+            totalTransactions: count,
+            sampleTransaction: sample,
+            hasTransactions: count > 0
+        });
+    } catch (error) {
+        res.json({ error: error.message });
+    }
+});
+
 app.post('/api/sms/batch', async (req, res) => {
     try {
         console.log('\n📨 Received SMS batch request');
@@ -264,6 +283,7 @@ app.post('/api/sms/batch', async (req, res) => {
         // Try to get user info from JWT token if available
         let userIdFromToken = null;
         let userEmailFromToken = null;
+        let userObjectIdFromToken = null;
         
         const authHeader = req.headers.authorization;
         if (authHeader && authHeader.startsWith('Bearer ')) {
@@ -271,7 +291,8 @@ app.post('/api/sms/batch', async (req, res) => {
             try {
                 const jwt = require('jsonwebtoken');
                 const decoded = jwt.decode(token);
-                userIdFromToken = decoded?.id || decoded?.userId || decoded?._id || decoded?.sub;
+                userObjectIdFromToken = decoded?.id || decoded?.userId || decoded?._id || decoded?.sub;
+                userIdFromToken = userObjectIdFromToken;
                 userEmailFromToken = decoded?.email || decoded?.userEmail;
                 console.log(`   🔑 Token user ID: ${userIdFromToken}`);
                 console.log(`   🔑 Token email: ${userEmailFromToken}`);
@@ -283,6 +304,7 @@ app.post('/api/sms/batch', async (req, res) => {
         // Determine final user info (priority: token > body)
         const finalUserEmail = userEmailFromToken || user_email;
         const finalUserUuid = userIdFromToken || user_uuid;
+        const finalUserObjectId = userObjectIdFromToken;
         
         if (!messages || messages.length === 0) {
             return res.status(400).json({
@@ -308,6 +330,7 @@ app.post('/api/sms/batch', async (req, res) => {
         console.log(`\n📊 PROCESSING SUMMARY:`);
         console.log(`   📧 User email: ${finalUserEmail || 'NOT PROVIDED'}`);
         console.log(`   🆔 User UUID: ${finalUserUuid || 'NOT PROVIDED'}`);
+        console.log(`   🆔 User ObjectId: ${finalUserObjectId || 'NOT PROVIDED'}`);
         console.log(`   📁 Folder name: ${folderName}`);
         console.log(`   📨 Total messages: ${messages.length}`);
         
@@ -352,6 +375,108 @@ app.post('/api/sms/batch', async (req, res) => {
             });
         }
         
+        // ============================================
+        // SAVE TO MONGODB USING TRANSACTION MODEL
+        // ============================================
+        let savedToMongoCount = 0;
+        let mongoErrors = [];
+        let userId = finalUserObjectId;
+        
+        try {
+            // If we don't have user ObjectId from token, try to find user by email/uuid
+            if (!userId && (finalUserEmail || finalUserUuid)) {
+                const User = require('./models/User');
+                let user = await User.findOne({ 
+                    $or: [
+                        { email: finalUserEmail },
+                        { uuid: finalUserUuid }
+                    ]
+                });
+                
+                if (user) {
+                    userId = user._id;
+                    console.log(`✅ Found user in MongoDB: ${user.email} (ID: ${userId})`);
+                } else if (finalUserEmail) {
+                    // Create user if doesn't exist
+                    const newUser = new User({
+                        email: finalUserEmail,
+                        uuid: finalUserUuid,
+                        name: finalUserEmail.split('@')[0],
+                        createdAt: new Date()
+                    });
+                    await newUser.save();
+                    userId = newUser._id;
+                    console.log(`✅ Created new user: ${newUser.email} (ID: ${userId})`);
+                }
+            }
+            
+            if (userId) {
+                // Save each financial message as a Transaction
+                for (let i = 0; i < financialMessages.length; i++) {
+                    const msg = financialMessages[i];
+                    try {
+                        // Parse date properly
+                        let transactionDate = new Date(msg.timestamp);
+                        if (isNaN(transactionDate.getTime())) {
+                            transactionDate = new Date(msg.raw_timestamp);
+                        }
+                        if (isNaN(transactionDate.getTime())) {
+                            transactionDate = new Date();
+                        }
+                        
+                        // Format date as string (your schema uses String for date)
+                        const dateString = transactionDate.toLocaleDateString();
+                        
+                        // Create transaction using your schema
+                        const transactionData = {
+                            userId: userId,
+                            name: msg.merchant || msg.sender || 'SMS Transaction',
+                            amount: msg.amount || 0,
+                            date: dateString,
+                            category: msg.category,
+                            type: msg.transaction_type, // 'credit' or 'debit'
+                            status: 'success',
+                            userEmail: finalUserEmail || 'unknown',
+                            userUuid: finalUserUuid || userIdentifier,
+                            androidUuid: device_id || null
+                            // fileId is not set for SMS imports
+                        };
+                        
+                        console.log(`   💾 Saving transaction ${i+1}:`, {
+                            type: transactionData.type,
+                            amount: transactionData.amount,
+                            name: transactionData.name
+                        });
+                        
+                        const transaction = new Transaction(transactionData);
+                        const saved = await transaction.save();
+                        savedToMongoCount++;
+                        console.log(`   ✅ [${savedToMongoCount}] Saved to MongoDB: ${msg.transaction_type} ${msg.amount} - ${msg.merchant}`);
+                        
+                    } catch (saveError) {
+                        console.error(`   ❌ Failed to save transaction ${i+1}:`, saveError.message);
+                        mongoErrors.push({ 
+                            index: i, 
+                            message: msg.message.substring(0, 50), 
+                            error: saveError.message 
+                        });
+                    }
+                }
+                console.log(`✅ Successfully saved ${savedToMongoCount}/${financialMessages.length} transactions to MongoDB`);
+            } else {
+                console.log(`⚠️ No user ID found, skipping MongoDB save`);
+                mongoErrors.push({ error: 'No user ID available - please login first' });
+            }
+            
+        } catch (dbError) {
+            console.error('❌ MongoDB operation error:', dbError);
+            mongoErrors.push({ error: dbError.message });
+        }
+        
+        // ============================================
+        // CONTINUE WITH CSV SAVING (existing code)
+        // ============================================
+        
         // Save CSV file
         const date = new Date();
         const timestamp_str = `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}_${String(date.getHours()).padStart(2,'0')}-${String(date.getMinutes()).padStart(2,'0')}-${String(date.getSeconds()).padStart(2,'0')}`;
@@ -389,6 +514,7 @@ app.post('/api/sms/batch', async (req, res) => {
         console.log(`\n✅ CSV SAVED SUCCESSFULLY!`);
         console.log(`   📁 Location: ${UPLOADS_CSV_DIR}/${folderName}/${csvFileName}`);
         console.log(`   💾 Size: ${fileSizeKB} KB`);
+        console.log(`   💾 MongoDB: ${savedToMongoCount} transactions saved`);
         
         res.json({
             success: true,
@@ -402,6 +528,8 @@ app.post('/api/sms/batch', async (req, res) => {
             csv_saved: true,
             csv_file: csvFileName,
             csv_size_kb: fileSizeKB,
+            mongo_saved: savedToMongoCount,
+            mongo_errors: mongoErrors.length > 0 ? mongoErrors : undefined,
             statistics: {
                 total_debit: totalDebit,
                 total_credit: totalCredit,
