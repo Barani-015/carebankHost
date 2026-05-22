@@ -715,6 +715,23 @@ function categorizeTransaction(messageText) {
     return 'Other';
 }
 
+
+app.get('/api/debug/csv-files/:userId', async (req, res) => {
+    try {
+        const { listUserCSVs } = require('./services/csvStorage');
+        const files = await listUserCSVs(req.params.userId);
+        res.json({
+            success: true,
+            userId: req.params.userId,
+            fileCount: files.length,
+            files: files
+        });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+
 // Error handling middleware (should be last)
 app.use(errorHandler);
 
