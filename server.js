@@ -14,6 +14,7 @@ const json2csv = require('json2csv').parse;
 const User = require('./models/User');
 const { connectDB, initializeDatabase } = require('./config/database');
 
+
 // Import middleware
 // const { corsMiddleware } = require('./middleware/cors');
 const { corsMiddleware, manualCorsHeaders, androidCorsMiddleware } = require('./middleware/cors');
@@ -28,8 +29,11 @@ const couponRoutes = require('./routes/couponRoutes');
 const transactionRoutes = require('./routes/transactionRoutes');
 const analyticsRoutes = require('./routes/analyticsRoutes');
 const paymentRoutes = require('./routes/paymentRoutes');
-const aiRoutes = require('./routes/aiRoutes');
+// const aiRoutes = require('./routes/aiRoutes');
 const fileRoutes = require('./routes/fileRoutes');
+
+const aiService = require('./services/aiService');
+console.log('✅ aiService loaded:', typeof aiService); // should print "function"
 
 const app = express();
 
@@ -111,7 +115,8 @@ app.use('/api/coupons', couponRoutes);
 app.use('/api', transactionRoutes);
 app.use('/api/analytics', analyticsRoutes);
 app.use('/api/payments', paymentRoutes);
-app.use('/api/ai', aiRoutes);
+// app.use('/api/ai', aiRoutes);
+app.use('/api/ai', aiService);
 app.use('/api/files', fileRoutes);
 
 // Health check
@@ -119,22 +124,7 @@ app.get('/api/test', (req, res) => {
     res.json({ success: true, message: 'Server is running!', timestamp: new Date().toISOString() });
 });
 
-const pythonServiceUrl = process.env.PYTHON_SERVICE_URL || 'https://carebank-ai.onrender.com';
 
-console.log(`🔗 Python service URL: ${pythonServiceUrl}`);
-// Test endpoint to check Python service connection
-app.get('/api/ai/test-python', async (req, res) => {
-    try {
-        const axios = require('axios');
-        // Use environment variable for Python service URL
-        const response = await axios.get(`${pythonServiceUrl}/health`);
-        console.log(pythonServiceUrl);
-        console.log('✅ Python service response:', response.data);
-        res.json({ success: true, pythonService: response.data });
-    } catch (error) {
-        res.json({ success: false, error: 'Python service not available' });
-    }
-});
 
 // Health check endpoint
 app.get('/health', (req, res) => {

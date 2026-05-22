@@ -2990,20 +2990,14 @@ async function sendSimpleChat(section) {
     let apiUrl;
     let requestBody;
     
-    if (section === 'budget') {
-      // For Budget Planner - use transaction CSV endpoint
-      apiUrl = 'http://localhost:5000/chat/transaction';
-      requestBody = {
-        user_id: userId,
-        question: userMessage
-      };
-    } else {
-      // For other sections - use simple chat
-      apiUrl = 'http://localhost:5000/chat';
-      requestBody = {
-        prompt: `You are a ${agentName} financial assistant. ${userMessage}`
-      };
-    }
+    // REPLACE WITH:
+
+
+    apiUrl = `${API}/ai/chat/transaction`;   // → https://carebankhost-1.onrender.com/api/ai/chat/transaction
+    requestBody = {
+      user_id: userId,
+      question: userMessage
+    };
     
     console.log(`📡 Calling AI service: ${apiUrl}`);
     console.log(`📤 Request body:`, requestBody);
@@ -3045,30 +3039,30 @@ async function sendSimpleChat(section) {
   }
 }
 
-// Add this function to get the user's CSV folder ID
-async function getUserCSVFolderId() {
-  // First, try to get from backend where user's folder is stored
-  try {
-    const response = await fetch(`${API}/user/csv-folder`, {
-      headers: { 'Authorization': `Bearer ${state.token}` }
-    });
-    const data = await response.json();
-    if (data.success && data.folderId) {
-      return data.folderId;
-    }
-  } catch (error) {
-    console.log('Could not fetch CSV folder from backend, using fallback');
-  }
+// // Add this function to get the user's CSV folder ID
+// async function getUserCSVFolderId() {
+//   // First, try to get from backend where user's folder is stored
+//   try {
+//     const response = await fetch(`${API}/user/csv-folder`, {
+//       headers: { 'Authorization': `Bearer ${state.token}` }
+//     });
+//     const data = await response.json();
+//     if (data.success && data.folderId) {
+//       return data.folderId;
+//     }
+//   } catch (error) {
+//     console.log('Could not fetch CSV folder from backend, using fallback');
+//   }
   
-  // Fallback: use user ID or email as folder name
-  // In your uploadsCSVs folder, you have folders like "69ddec0ea6caed6e9922a769"
-  // You need to map your user to these folder IDs
-  const userId = state.user?.id || state.user?._id;
+//   // Fallback: use user ID or email as folder name
+//   // In your uploadsCSVs folder, you have folders like "69ddec0ea6caed6e9922a769"
+//   // You need to map your user to these folder IDs
+//   const userId = state.user?.id || state.user?._id;
   
-  // If you have a mapping in your database, use it
-  // For demo, we'll use the user's ID
-  return userId;
-}
+//   // If you have a mapping in your database, use it
+//   // For demo, we'll use the user's ID
+//   return userId;
+// }
 
 // Typing indicator functions
 function showTyping(section) {
