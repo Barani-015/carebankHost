@@ -39,16 +39,14 @@
 
 
 const express = require('express');
-const multer              = require('multer');
-
+const multer = require('multer');
 const { uploadCSV, listUserCSVs, deleteCSV } = require('../services/csvStorage');
+const authMiddleware = require('../middleware/auth'); // ✅ import your auth middleware
 
-const upload = multer({ storage: multer.memoryStorage() }); // store in memory first
-
+const upload = multer({ storage: multer.memoryStorage() });
 const router = express.Router();
-
 // Upload CSV
-router.post('/upload', upload.single('csvFile'), async (req, res) => {
+router.post('/upload', authMiddleware,upload.single('csvFile'), async (req, res) => {
     try {
         if (!req.file) {
             return res.status(400).json({ success: false, message: 'No file uploaded' });
@@ -74,7 +72,7 @@ router.post('/upload', upload.single('csvFile'), async (req, res) => {
 });
 
 // List user files
-router.get('/files', async (req, res) => {
+router.get('/files',authMiddleware, async (req, res) => {
     try {
         const userId = req.user?.id || req.user?._id;
         const files  = await listUserCSVs(userId);
@@ -85,7 +83,7 @@ router.get('/files', async (req, res) => {
 });
 
 // Delete file
-router.delete('/files/:fileId', async (req, res) => {
+router.delete('/files/:fileId',authMiddleware, async (req, res) => {
     try {
         const userId = req.user?.id || req.user?._id;
         await deleteCSV(userId, req.params.fileId);
