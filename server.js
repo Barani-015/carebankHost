@@ -10,7 +10,8 @@ const User = require('./models/User');
 const { connectDB, initializeDatabase } = require('./config/database');
 
 // Import middleware
-const { corsMiddleware } = require('./middleware/cors');
+// const { corsMiddleware } = require('./middleware/cors');
+const { corsMiddleware, manualCorsHeaders, androidCorsMiddleware } = require('./middleware/cors');
 const requestLogger = require('./middleware/requestLogger');
 const errorHandler = require('./middleware/errorHandler');
 
@@ -26,6 +27,10 @@ const aiRoutes = require('./routes/aiRoutes');
 const fileRoutes = require('./routes/fileRoutes');
 
 const app = express();
+
+app.use(androidCorsMiddleware);  // First: Android special handling
+app.use(manualCorsHeaders);       // Second: Manual headers
+app.use(corsMiddleware);        // Third: General CORS middleware (can be more permissive since manual headers are set)
 
 app.set('trust proxy', 1);
 
@@ -110,6 +115,8 @@ app.get('/api/test', (req, res) => {
 });
 
 const pythonServiceUrl = process.env.PYTHON_SERVICE_URL || 'https://carebank-ai.onrender.com';
+
+console.log(`🔗 Python service URL: ${pythonServiceUrl}`);
 // Test endpoint to check Python service connection
 app.get('/api/ai/test-python', async (req, res) => {
     try {
