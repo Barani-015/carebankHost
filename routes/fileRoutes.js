@@ -44,6 +44,8 @@ const { uploadCSV, listUserCSVs, deleteCSV } = require('../services/csvStorage')
 
 const upload = multer({ storage: multer.memoryStorage() }); // store in memory first
 
+const router = express.Router();
+
 // Upload CSV
 router.post('/upload', upload.single('csvFile'), async (req, res) => {
     try {
