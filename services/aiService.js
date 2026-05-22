@@ -1,7 +1,7 @@
 /**
- * CareBank AI Service — Node.js port of the Python Flask AI service
- * Endpoints mirror the original Python service exactly.
- * Uses Hugging Face Inference API only (Ollama/offline fallback removed).
+ * CareBank AI Service — Node.js
+ * Uses Hugging Face Inference API only.
+ * Falls back to general financial advice if no CSV uploaded.
  */
 
 require('dotenv').config();
@@ -12,8 +12,7 @@ const fs      = require('fs');
 const path    = require('path');
 const { listUserCSVs, downloadCSV } = require('./csvStorage');
 
-const router = express.Router();   // ← use as a router inside your main app
-// OR run standalone:  const app = express(); app.use(router); app.listen(5000);
+const router = express.Router();
 
 // ============================================
 // Configuration
@@ -21,32 +20,24 @@ const router = express.Router();   // ← use as a router inside your main app
 const HF_API_TOKEN  = process.env.HF_TOKEN || '';
 const HF_MODEL_NAME = 'meta-llama/Llama-3.2-3B-Instruct';
 
-// const BASE_DIR          = path.join(__dirname);
-// const UPLOAD_CSV_FOLDER = path.join(BASE_DIR, 'uploadsCSVs');
-
-const BASE_DIR          = path.join(__dirname, '..');   // ← go up one level out of /services/
+const BASE_DIR          = path.join(__dirname, '..');
 const UPLOAD_CSV_FOLDER = path.join(BASE_DIR, 'uploadsCSVs');
 
 // ============================================
 // In-Memory CSV Cache  (TTL = 5 minutes)
 // ============================================
-const CSV_CACHE     = {};   // { userId: { data, timestamp } }
-const CACHE_TTL_MS  = 5 * 60 * 1000;
+const CSV_CACHE    = {};
+const CACHE_TTL_MS = 5 * 60 * 1000;
 
 // ============================================
-// Helpers
+// CSV Helpers
 // ============================================
-
-/**
- * Parse a CSV string into an array of row objects.
- * Handles quoted fields and commas inside quotes.
- */
 function parseCSV(csvText) {
     const lines = csvText.trim().split('\n');
     if (lines.length < 2) return [];
 
     const headers = splitCSVLine(lines[0]);
-    const rows = [];
+    const rows    = [];
 
     for (let i = 1; i < lines.length; i++) {
         const values = splitCSVLine(lines[i]);
@@ -62,7 +53,7 @@ function parseCSV(csvText) {
 
 function splitCSVLine(line) {
     const result = [];
-    let current = '';
+    let current  = '';
     let inQuotes = false;
 
     for (let i = 0; i < line.length; i++) {
@@ -80,10 +71,9 @@ function splitCSVLine(line) {
     return result;
 }
 
-/**
- * Load all CSV files for a user and return { filename: rows[] }.
- * Throws if the user folder does not exist.
- */
+// ============================================
+// Load CSV from MongoDB GridFS
+// ============================================
 async function loadUserCSVFiles(userId) {
     console.log(`📂 Loading CSV files from MongoDB for user: ${userId}`);
 
@@ -97,7 +87,7 @@ async function loadUserCSVFiles(userId) {
 
     for (const file of files) {
         try {
-            const content  = await downloadCSV(file.id);
+            const content          = await downloadCSV(file.id);
             csvData[file.filename] = parseCSV(content);
             console.log(`   ✅ Loaded: ${file.filename} (${csvData[file.filename].length} rows)`);
         } catch (err) {
@@ -108,9 +98,9 @@ async function loadUserCSVFiles(userId) {
     return csvData;
 }
 
-/**
- * Return cached CSV data, or load fresh if stale/missing.
- */
+// ============================================
+// CSV Cache
+// ============================================
 async function getCachedCSVData(userId) {
     const now   = Date.now();
     const entry = CSV_CACHE[userId];
@@ -137,13 +127,8 @@ function invalidateCache(userId = null) {
 }
 
 // ============================================
-// Context Builder  (lightweight, no RAG deps)
+// Context Builder
 // ============================================
-
-/**
- * Build a text summary of the user's CSV data to pass as context to the LLM.
- * Keeps things short to stay within the model's token limit.
- */
 function buildContext(csvData, question = '') {
     const parts = [];
     const q     = question.toLowerCase();
@@ -151,7 +136,6 @@ function buildContext(csvData, question = '') {
     for (const [filename, rows] of Object.entries(csvData)) {
         if (rows.length === 0) continue;
 
-        // --- summary line ---
         let totalSpend  = 0;
         let totalIncome = 0;
 
@@ -166,9 +150,8 @@ function buildContext(csvData, question = '') {
         if (totalSpend  > 0) parts.push(`  Total debit:  ₹${totalSpend.toFixed(2)}`);
         if (totalIncome > 0) parts.push(`  Total credit: ₹${totalIncome.toFixed(2)}`);
 
-        // --- sample rows (relevance-filtered) ---
         const keywords = q.split(/\s+/).filter(w => w.length > 3);
-        let sample = rows;
+        let sample     = rows;
 
         if (keywords.length > 0) {
             const filtered = rows.filter(row =>
@@ -181,11 +164,13 @@ function buildContext(csvData, question = '') {
             sample = rows.slice(0, 5);
         }
 
-        const headers = Object.keys(sample[0]);
-        parts.push('  Sample rows:');
-        parts.push('  ' + headers.join(' | '));
-        for (const row of sample) {
-            parts.push('  ' + headers.map(h => row[h] || '').join(' | '));
+        if (sample.length > 0) {
+            const headers = Object.keys(sample[0]);
+            parts.push('  Sample rows:');
+            parts.push('  ' + headers.join(' | '));
+            for (const row of sample) {
+                parts.push('  ' + headers.map(h => row[h] || '').join(' | '));
+            }
         }
     }
 
@@ -195,11 +180,6 @@ function buildContext(csvData, question = '') {
 // ============================================
 // Hugging Face API
 // ============================================
-
-/**
- * Call the HF Inference API with a formatted Llama-3.2 prompt.
- * Returns { success, response, model, provider, apiDurationMs }
- */
 async function queryHuggingFace(prompt) {
     const start = Date.now();
 
@@ -212,7 +192,6 @@ async function queryHuggingFace(prompt) {
         };
     }
 
-    // Llama-3.2 chat format
     const formattedPrompt =
         `<|begin_of_text|><|start_header_id|>system<|end_header_id|>\n\n` +
         `You are a helpful financial data analyst. Answer based on the CSV data accurately and concisely.` +
@@ -243,8 +222,8 @@ async function queryHuggingFace(prompt) {
                     Authorization:  `Bearer ${HF_API_TOKEN}`,
                     'Content-Type': 'application/json',
                 },
-                body:    JSON.stringify(payload),
-                signal:  AbortSignal.timeout(60_000),   // 60-second timeout
+                body:   JSON.stringify(payload),
+                signal: AbortSignal.timeout(60_000),
             }
         );
 
@@ -290,7 +269,9 @@ async function queryHuggingFace(prompt) {
 
         return {
             success:      false,
-            response:     isTimeout ? 'Hugging Face API timeout (60 s)' : `Hugging Face error: ${err.message}`,
+            response:     isTimeout
+                ? 'Hugging Face API timeout (60s). Please try again.'
+                : `Hugging Face error: ${err.message}`,
             error:        err.message,
             provider:     'huggingface',
             apiDurationMs,
@@ -301,7 +282,6 @@ async function queryHuggingFace(prompt) {
 // ============================================
 // Main Query Orchestrator
 // ============================================
-
 async function queryAIWithCSV(userId, question) {
     console.log('='.repeat(60));
     console.log(`📨 NEW QUERY`);
@@ -311,7 +291,7 @@ async function queryAIWithCSV(userId, question) {
 
     const totalStart = Date.now();
 
-    // Simple greeting shortcut
+    // Greeting shortcut — no CSV needed
     if (['hi', 'hello', 'hey'].includes(question.toLowerCase().trim())) {
         return {
             success:        true,
@@ -323,22 +303,25 @@ async function queryAIWithCSV(userId, question) {
         };
     }
 
+    // Default context — used when no CSV uploaded yet
+    let context = 'No transaction data uploaded yet. Answer as a general financial advisor.';
+
+    // Try loading CSV from MongoDB — don't crash if missing
     try {
-        // 1. Load (cached) CSV data
-        // const csvData = getCachedCSVData(userId);
-
         const csvData = await getCachedCSVData(userId);
+        const built   = buildContext(csvData, question);
+        if (built.trim()) {
+            context = built;
+            console.log(`🔍 Context built from CSV (${context.length} chars)`);
+        }
+    } catch (csvErr) {
+        console.log(`⚠️ No CSV data for user ${userId} — using general mode`);
+    }
 
-        // 2. Build context
-        const context = buildContext(csvData, question);
-        console.log(`🔍 Context built (${context.length} chars)`);
-
-        // 3. Construct prompt
-        const prompt = `Based on this financial data:\n${context}\n\nAnswer concisely in English: ${question}`;
-
-        // 4. Call Hugging Face
-        const result = await queryHuggingFace(prompt);
-
+    // Call HuggingFace
+    try {
+        const prompt  = `Based on this financial data:\n${context}\n\nAnswer concisely in English: ${question}`;
+        const result  = await queryHuggingFace(prompt);
         const totalMs = Date.now() - totalStart;
 
         console.log('='.repeat(60));
@@ -351,7 +334,7 @@ async function queryAIWithCSV(userId, question) {
         return {
             success:        result.success,
             response:       result.response,
-            model:          result.model   || HF_MODEL_NAME,
+            model:          result.model    || HF_MODEL_NAME,
             provider:       result.provider || 'huggingface',
             userId,
             responseTimeMs: totalMs,
@@ -361,10 +344,6 @@ async function queryAIWithCSV(userId, question) {
     } catch (err) {
         const totalMs = Date.now() - totalStart;
         console.error(`❌ ERROR — User: ${userId} | ${err.message}`);
-
-        console.log(`⚠️ No CSV data for user ${userId} — answering without data`);
-            context = 'No transaction data available for this user yet.';
-
         return {
             success:        false,
             response:       `Error: ${err.message}`,
@@ -372,36 +351,31 @@ async function queryAIWithCSV(userId, question) {
             responseTimeMs: totalMs,
         };
     }
-
-    const prompt = `Based on this financial data:\n${context}\n\nAnswer concisely in English: ${question}`;
-        const result = await queryHuggingFace(prompt);
 }
 
 // ============================================
-// Routes  (same paths as the Python service)
+// Routes
 // ============================================
 
-/**
- * POST /chat/transaction
- * Body: { user_id, question }
- */
+// POST /chat/transaction
 router.post('/chat/transaction', async (req, res) => {
     const { user_id, question } = req.body || {};
 
     console.log(`🌐 POST /chat/transaction — User: ${user_id}`);
 
     if (!user_id || !question) {
-        return res.status(400).json({ success: false, message: 'user_id and question are required' });
+        return res.status(400).json({
+            success: false,
+            message: 'user_id and question are required'
+        });
     }
 
     const result = await queryAIWithCSV(user_id, question);
     return res.json(result);
 });
 
-/**
- * GET /user/csv_files?user_id=xxx
- */
-router.get('/user/csv_files', (req, res) => {
+// GET /user/csv_files?user_id=xxx
+router.get('/user/csv_files', async (req, res) => {
     const { user_id } = req.query;
 
     console.log(`🌐 GET /user/csv_files — User: ${user_id}`);
@@ -410,54 +384,41 @@ router.get('/user/csv_files', (req, res) => {
         return res.status(400).json({ success: false, message: 'user_id is required' });
     }
 
-    const userFolder = path.join(UPLOAD_CSV_FOLDER, String(user_id));
-
-    if (!fs.existsSync(userFolder)) {
-        return res.status(404).json({ success: false, message: `User "${user_id}" not found` });
+    try {
+        const files = await listUserCSVs(user_id);
+        return res.json({ success: true, user_id, csv_files: files, total_files: files.length });
+    } catch (err) {
+        return res.status(500).json({ success: false, message: err.message });
     }
-
-    const files = fs.readdirSync(userFolder)
-        .filter(f => f.endsWith('.csv'))
-        .map(f => {
-            const stat = fs.statSync(path.join(userFolder, f));
-            return { filename: f, size_kb: +(stat.size / 1024).toFixed(2) };
-        });
-
-    return res.json({ success: true, user_id, csv_files: files, total_files: files.length });
 });
 
-/**
- * GET /health
- */
+// GET /health
 router.get('/health', (_req, res) => {
     console.log(`🌐 GET /health`);
     return res.json({
-        success:               true,
-        status:                'running',
-        primary_model:         HF_MODEL_NAME,
-        primary_provider:      'huggingface',
+        success:                true,
+        status:                 'running',
+        primary_model:          HF_MODEL_NAME,
+        primary_provider:       'huggingface',
         huggingface_configured: Boolean(HF_API_TOKEN),
-        rag_available:         false,   // RAG removed (no Python deps)
-        timestamp:             new Date().toISOString(),
+        rag_available:          false,
+        timestamp:              new Date().toISOString(),
     });
 });
 
-/**
- * POST /user/cache/invalidate
- * Body: { user_id? }  — omit to clear all
- */
+// POST /user/cache/invalidate
 router.post('/user/cache/invalidate', (req, res) => {
     const userId = req.body?.user_id || null;
     invalidateCache(userId);
     return res.json({
         success: true,
-        message: userId ? `Cache invalidated for user ${userId}` : 'All cache invalidated',
+        message: userId
+            ? `Cache invalidated for user ${userId}`
+            : 'All cache invalidated',
     });
 });
 
-/**
- * GET /provider/status
- */
+// GET /provider/status
 router.get('/provider/status', (_req, res) => {
     return res.json({
         success: true,
@@ -471,8 +432,9 @@ router.get('/provider/status', (_req, res) => {
 });
 
 // ============================================
-// Export (used as a router in server.js)
+// Export router
 // ============================================
+module.exports = router;
 
 // ============================================
 // Standalone mode  (node aiService.js)
@@ -480,30 +442,18 @@ router.get('/provider/status', (_req, res) => {
 if (require.main === module) {
     const app  = express();
     const PORT = process.env.AI_PORT || 5000;
-    
+
     app.use(cors());
     app.use(express.json({ limit: '10mb' }));
     app.use('/', router);
 
-    fs.mkdirSync(UPLOAD_CSV_FOLDER, { recursive: true });
-    
     app.listen(PORT, '0.0.0.0', () => {
         console.log('\n' + '='.repeat(70));
-        console.log('🚀 CareBank AI Service (Node.js) Starting');
+        console.log('🚀 CareBank AI Service (Node.js)');
         console.log('='.repeat(70));
-        console.log(`📂 CSV Folder : ${UPLOAD_CSV_FOLDER}`);
-        console.log(`\n🤖 AI Configuration:`);
-        console.log(`   Provider : Hugging Face`);
-        console.log(`   Model    : ${HF_MODEL_NAME}`);
-        console.log(`   Token    : ${HF_API_TOKEN ? '✅ Configured' : '❌ Missing — set HF_TOKEN in .env'}`);
-        console.log(`\n📋 Endpoints:`);
-        console.log(`   POST /chat/transaction       — Chat with CSV data`);
-        console.log(`   GET  /user/csv_files         — List user CSV files`);
-        console.log(`   GET  /health                 — Health check`);
-        console.log(`   POST /user/cache/invalidate  — Clear cache`);
-        console.log(`   GET  /provider/status        — Provider status`);
-        console.log(`\n💻 Listening on http://0.0.0.0:${PORT}`);
+        console.log(`🤖 Model    : ${HF_MODEL_NAME}`);
+        console.log(`🔑 Token    : ${HF_API_TOKEN ? '✅ Configured' : '❌ Missing — set HF_TOKEN in .env'}`);
+        console.log(`💻 Port     : ${PORT}`);
         console.log('='.repeat(70) + '\n');
     });
 }
-module.exports = router;
