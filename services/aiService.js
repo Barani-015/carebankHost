@@ -364,6 +364,9 @@ async function queryAIWithCSV(userId, question) {
         const totalMs = Date.now() - totalStart;
         console.error(`❌ ERROR — User: ${userId} | ${err.message}`);
 
+        console.log(`⚠️ No CSV data for user ${userId} — answering without data`);
+            context = 'No transaction data available for this user yet.';
+
         return {
             success:        false,
             response:       `Error: ${err.message}`,
@@ -371,6 +374,9 @@ async function queryAIWithCSV(userId, question) {
             responseTimeMs: totalMs,
         };
     }
+
+    const prompt = `Based on this financial data:\n${context}\n\nAnswer concisely in English: ${question}`;
+        const result = await queryHuggingFace(prompt);
 }
 
 // ============================================
