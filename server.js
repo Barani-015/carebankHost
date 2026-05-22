@@ -1,8 +1,8 @@
 // ✅ Line 1 — must be before everything
 
-process.env.NODE_OPTIONS = '--dns-result-order=ipv4first';
+process.env.NODE_OPTIONS = '--dns-result-order=ipv6first';
 const dns = require('dns');
-dns.setDefaultResultOrder('ipv4first');
+dns.setDefaultResultOrder('ipv6first');
 
 require('dotenv').config();
 

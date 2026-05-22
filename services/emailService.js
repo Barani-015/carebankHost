@@ -72,23 +72,27 @@
 const nodemailer = require('nodemailer');
 const dns = require('dns');
 
-// ✅ CRITICAL: Force IPv4 globally (Fixes Render's IPv6 issue)
-dns.setDefaultResultOrder('ipv4first');
+// ✅ Force IPv6 instead of IPv4
+dns.setDefaultResultOrder('ipv6first');
 
-// Configure email transporter with IPv4 fix
+// Configure email transporter with IPv6
 const transporter = nodemailer.createTransport({
-  host: 'smtp.gmail.com',  // Use explicit host instead of 'service'
-  port: 465,                // SSL port
-  secure: true,             // Use SSL
+  host: 'smtp.gmail.com',
+  port: 465,
+  secure: true,
   auth: {
     user: process.env.EMAIL_USER,
     pass: process.env.EMAIL_PASS
   },
-  // ✅ CRITICAL: Force IPv4 (fixes Render's IPv6 ENETUNREACH error)
-  family: 4,
-  connectionTimeout: 10000,
-  greetingTimeout: 10000,
-  socketTimeout: 10000
+  // ✅ Force IPv6
+  family: 6,  // Changed from 4 to 6
+  connectionTimeout: 30000,  // Increased timeout for IPv6
+  greetingTimeout: 30000,
+  socketTimeout: 30000,
+  // Disable TLS strictness for IPv6
+  tls: {
+    rejectUnauthorized: false  // Temporarily for testing
+  }
 });
 
 // Generate 6-digit OTP
@@ -98,12 +102,6 @@ const generateOTP = () => {
 
 // Send OTP email
 const sendOTPEmail = async (email, otp) => {
-  // For development without email config
-  if (process.env.NODE_ENV === 'development' && !process.env.EMAIL_USER) {
-    console.log(`📧 DEV MODE - OTP for ${email}: ${otp}`);
-    return true;
-  }
-
   const html = `
     <!DOCTYPE html>
     <html>
@@ -162,7 +160,7 @@ const sendOTPEmail = async (email, otp) => {
 const testEmailConfig = async () => {
   try {
     await transporter.verify();
-    console.log('✅ Email transporter ready (IPv4 forced)');
+    console.log('✅ Email transporter ready (IPv6 forced)');
     return true;
   } catch (error) {
     console.error('❌ Email transporter failed:', error.message);

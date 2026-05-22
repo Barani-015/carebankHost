@@ -4,10 +4,11 @@
   "description": "CareBank Backend API",
   "main": "server.js",
   "scripts": {
-    "start": "NODE_OPTIONS='--dns-result-order=ipv4first' node server.js",
-    "dev": "NODE_OPTIONS='--dns-result-order=ipv4first' nodemon server.js"
+       "start": "NODE_OPTIONS='--dns-result-order=ipv6first' node server.js",
+    "dev": "NODE_OPTIONS='--dns-result-order=ipv6first' nodemon server.js"
   },
   "dependencies": {
+    "@getbrevo/brevo": "^5.0.4",
     "bcryptjs": "^2.4.3",
     "cors": "^2.8.6",
     "crypto": "^1.0.1",
