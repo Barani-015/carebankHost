@@ -14,6 +14,7 @@ const json2csv = require('json2csv').parse;
 const User = require('./models/User');
 const { connectDB, initializeDatabase } = require('./config/database');
 const { initGridFS } = require('./config/gridfs');
+const { initGridFSBucket } = require('./services/gridfsService');
 
 
 // Import middleware
@@ -859,6 +860,27 @@ app.get('/api/debug/csv-files/:userId', async (req, res) => {
     }
 });
 
+// Test endpoint to read CSV from GridFS
+app.get('/api/debug/read-gridfs/:fileId', async (req, res) => {
+    try {
+        const { readCSVFile, parseCSVContent } = require('./services/gridfsService');
+        const fileId = new mongoose.Types.ObjectId(req.params.fileId);
+        
+        const csvContent = await readCSVFile(fileId);
+        const transactions = parseCSVContent(csvContent);
+        
+        res.json({
+            success: true,
+            fileId: req.params.fileId,
+            contentLength: csvContent.length,
+            transactionCount: transactions.length,
+            sampleTransactions: transactions.slice(0, 5)
+        });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
 
 // Error handling middleware (should be last)
 app.use(errorHandler);
@@ -870,7 +892,8 @@ const HOST = process.env.HOST || '0.0.0.0';
 // Connect to database and start server
 connectDB().then(async () => {
     await initializeDatabase();
-    initGridFS()
+    initGridFS();
+    initGridFSBucket();
     
     // Get local network IP addresses
     const networkInterfaces = require('os').networkInterfaces();
