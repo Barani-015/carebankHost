@@ -1,12 +1,12 @@
-// emailService.js - Working solution for Brevo v2.x
-const brevo = require('@getbrevo/brevo');
+// emailService.js - Direct HTTP API approach (100% reliable)
+const axios = require('axios');
 
 // Generate 6-digit OTP
 const generateOTP = () => {
     return Math.floor(100000 + Math.random() * 900000).toString();
 };
 
-// Send OTP email via Brevo API
+// Send OTP email via direct Brevo HTTP API
 const sendOTPEmail = async (email, otp) => {
     const html = `
     <!DOCTYPE html>
@@ -34,29 +34,40 @@ const sendOTPEmail = async (email, otp) => {
     </html>`;
 
     try {
-        // Initialize API instance
-        const apiInstance = new brevo.TransactionalEmailsApi();
-        
-        // Set API key using the correct method (not direct property access)
-        apiInstance.setApiKey(brevo.TransactionalEmailsApiApiKeys.apiKey, process.env.BREVO_API_KEY);
-        
-        // Create email object
-        const sendSmtpEmail = new brevo.SendSmtpEmail();
-        sendSmtpEmail.subject = 'CareBank - Your Verification Code';
-        sendSmtpEmail.htmlContent = html;
-        sendSmtpEmail.sender = { name: 'CareBank', email: process.env.BREVO_SENDER_EMAIL };
-        sendSmtpEmail.to = [{ email: email }];
+        // Direct API call to Brevo - no SDK issues
+        const response = await axios({
+            method: 'post',
+            url: 'https://api.brevo.com/v3/smtp/email',
+            headers: {
+                'api-key': process.env.BREVO_API_KEY,
+                'Content-Type': 'application/json',
+                'Accept': 'application/json'
+            },
+            data: {
+                sender: {
+                    name: 'CareBank',
+                    email: process.env.BREVO_SENDER_EMAIL
+                },
+                to: [{
+                    email: email
+                }],
+                subject: 'CareBank - Your Verification Code',
+                htmlContent: html
+            }
+        });
 
-        // Send email
-        const response = await apiInstance.sendTransacEmail(sendSmtpEmail);
-        console.log(`✅ Email sent to ${email}: ${response.messageId}`);
+        console.log(`✅ Email sent to ${email}: ${response.data.messageId}`);
         return true;
 
     } catch (error) {
         console.error('❌ Email send error:', error.message);
-        if (error.response && error.response.body) {
-            console.error('Error details:', error.response.body);
+        
+        // Log detailed error for debugging
+        if (error.response) {
+            console.error('API Error Response:', error.response.data);
+            console.error('Status Code:', error.response.status);
         }
+        
         if (process.env.NODE_ENV === 'production') {
             console.log(`⚠️ OTP for ${email} (email failed): ${otp}`);
         }
@@ -74,10 +85,26 @@ const testEmailConfig = async () => {
         console.error('❌ Email transporter failed: BREVO_SENDER_EMAIL not set');
         return false;
     }
-    console.log('✅ Email transporter ready (Brevo HTTP API)');
-    return true;
+    
+    // Test the API key by making a simple request
+    try {
+        const testResponse = await axios({
+            method: 'get',
+            url: 'https://api.brevo.com/v3/account',
+            headers: {
+                'api-key': process.env.BREVO_API_KEY
+            }
+        });
+        console.log('✅ Brevo API connection successful');
+        console.log('✅ Email transporter ready (Direct HTTP API)');
+        return true;
+    } catch (error) {
+        console.error('❌ Brevo API connection failed:', error.response?.data?.message || error.message);
+        return false;
+    }
 };
 
+// Only run test in production
 if (process.env.NODE_ENV === 'production') {
     testEmailConfig();
 }
