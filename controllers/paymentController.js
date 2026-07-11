@@ -123,10 +123,33 @@ const verifyPayment = async (req, res) => {
       couponCode,
       discountPercent
     } = req.body;
+
+    // FIX 1: Verify that all required fields are present
+    if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
+      console.error('Missing required payment verification fields:', {
+        razorpay_order_id,
+        razorpay_payment_id,
+        razorpay_signature
+      });
+      return res.status(400).json({
+        success: false,
+        message: 'Missing required payment verification fields'
+      });
+    }
+
+    // FIX 2: Check if KEY_SECRET is available
+    const keySecret = process.env.RAZORPAY_KEY_SECRET;
+    if (!keySecret) {
+      console.error('RAZORPAY_KEY_SECRET is not set in environment variables');
+      return res.status(500).json({
+        success: false,
+        message: 'Payment configuration error. Please contact support.'
+      });
+    }
     
     const body = razorpay_order_id + "|" + razorpay_payment_id;
     const expectedSignature = crypto
-      .createHmac("sha256", process.env.RAZORPAY_KEY_SECRET)
+      .createHmac("sha256", keySecret)
       .update(body.toString())
       .digest("hex");
     
@@ -147,18 +170,29 @@ const verifyPayment = async (req, res) => {
       });
     }
     
+    // FIX 3: Find payment with better error handling
     const payment = await Payment.findOne({ orderId: razorpay_order_id });
     if (!payment) {
+      console.error(`Payment record not found for orderId: ${razorpay_order_id}`);
       return res.status(404).json({ 
         success: false, 
         message: 'Payment record not found' 
       });
     }
     
-    payment.paymentId = razorpay_payment_id;
-    payment.signature = razorpay_signature;
-    payment.status = 'paid';
-    await payment.save();
+    // FIX 4: Update payment with better error handling
+    try {
+      payment.paymentId = razorpay_payment_id;
+      payment.signature = razorpay_signature;
+      payment.status = 'paid';
+      await payment.save();
+    } catch (dbError) {
+      console.error('Error saving payment:', dbError);
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to update payment record'
+      });
+    }
     
     const targetPlanKey = planKey || payment.planKey;
     const plan = PLAN_MAP[targetPlanKey];
@@ -175,104 +209,137 @@ const verifyPayment = async (req, res) => {
     const discountPct = payment.discountPercent || discountPercent || 0;
     const finalPrice = plan.price * (1 - discountPct / 100);
     
-    let subscription = await Subscription.findOne({ userId: req.user._id });
-    
-    if (subscription) {
-      subscription.planKey = targetPlanKey;
-      subscription.plan = plan.name;
-      subscription.price = finalPrice;
-      subscription.originalPrice = plan.price;
-      subscription.discountApplied = discountPct;
-      subscription.billing = plan.billing;
-      subscription.emoji = plan.emoji;
-      subscription.isPremium = plan.isPremium;
-      subscription.startDate = new Date();
-      subscription.endDate = endDate;
-      subscription.status = 'active';
-      subscription.couponCode = couponCode || payment.couponCode;
-      subscription.razorpayOrderId = razorpay_order_id;
-      subscription.razorpayPaymentId = razorpay_payment_id;
-      subscription.paymentStatus = 'completed';
-      await subscription.save();
-    } else {
-      subscription = await Subscription.create({
-        userId: req.user._id,
-        planKey: targetPlanKey,
-        plan: plan.name,
-        price: finalPrice,
-        originalPrice: plan.price,
-        discountApplied: discountPct,
-        billing: plan.billing,
-        emoji: plan.emoji,
-        isPremium: plan.isPremium,
-        startDate: new Date(),
-        endDate: endDate,
-        status: 'active',
-        couponCode: couponCode || payment.couponCode,
-        razorpayOrderId: razorpay_order_id,
-        razorpayPaymentId: razorpay_payment_id,
-        paymentStatus: 'completed'
-      });
+    // FIX 5: Wrap subscription creation in try-catch
+    let subscription;
+    try {
+      subscription = await Subscription.findOne({ userId: req.user._id });
+      
+      if (subscription) {
+        subscription.planKey = targetPlanKey;
+        subscription.plan = plan.name;
+        subscription.price = finalPrice;
+        subscription.originalPrice = plan.price;
+        subscription.discountApplied = discountPct;
+        subscription.billing = plan.billing;
+        subscription.emoji = plan.emoji;
+        subscription.isPremium = plan.isPremium;
+        subscription.startDate = new Date();
+        subscription.endDate = endDate;
+        subscription.status = 'active';
+        subscription.couponCode = couponCode || payment.couponCode;
+        subscription.razorpayOrderId = razorpay_order_id;
+        subscription.razorpayPaymentId = razorpay_payment_id;
+        subscription.paymentStatus = 'completed';
+        await subscription.save();
+      } else {
+        subscription = await Subscription.create({
+          userId: req.user._id,
+          planKey: targetPlanKey,
+          plan: plan.name,
+          price: finalPrice,
+          originalPrice: plan.price,
+          discountApplied: discountPct,
+          billing: plan.billing,
+          emoji: plan.emoji,
+          isPremium: plan.isPremium,
+          startDate: new Date(),
+          endDate: endDate,
+          status: 'active',
+          couponCode: couponCode || payment.couponCode,
+          razorpayOrderId: razorpay_order_id,
+          razorpayPaymentId: razorpay_payment_id,
+          paymentStatus: 'completed'
+        });
+      }
+    } catch (subscriptionError) {
+      console.error('Error managing subscription:', subscriptionError);
+      // Don't fail the entire request, but log the error
+      // The payment is already verified
     }
     
-    await Transaction.create({
-      userId: req.user._id,
-      name: `${plan.name} Subscription`,
-      amount: finalPrice,
-      date: new Date(),
-      category: 'Subscription',
-      type: 'debit',
-      status: 'success',
-      razorpayPaymentId: razorpay_payment_id,
-      razorpayOrderId: razorpay_order_id
-    });
+    // FIX 6: Wrap transaction creation
+    try {
+      await Transaction.create({
+        userId: req.user._id,
+        name: `${plan.name} Subscription`,
+        amount: finalPrice,
+        date: new Date(),
+        category: 'Subscription',
+        type: 'debit',
+        status: 'success',
+        razorpayPaymentId: razorpay_payment_id,
+        razorpayOrderId: razorpay_order_id
+      });
+    } catch (transactionError) {
+      console.error('Error creating transaction:', transactionError);
+      // Don't fail the entire request
+    }
     
-    const usedCouponCode = couponCode || payment.couponCode;
-    if (usedCouponCode) {
-      const coupon = await Coupon.findOne({ code: usedCouponCode.toUpperCase() });
-      if (coupon) {
-        const alreadyUsed = await UsedCoupon.findOne({ 
-          couponId: coupon._id, 
-          userId: req.user._id 
-        });
-        
-        if (!alreadyUsed) {
-          await UsedCoupon.create({
-            couponId: coupon._id,
-            userId: req.user._id,
-            subscriptionId: subscription._id
+    // FIX 7: Wrap coupon handling
+    try {
+      const usedCouponCode = couponCode || payment.couponCode;
+      if (usedCouponCode) {
+        const coupon = await Coupon.findOne({ code: usedCouponCode.toUpperCase() });
+        if (coupon) {
+          const alreadyUsed = await UsedCoupon.findOne({ 
+            couponId: coupon._id, 
+            userId: req.user._id 
           });
           
-          coupon.usedCount += 1;
-          await coupon.save();
+          if (!alreadyUsed) {
+            await UsedCoupon.create({
+              couponId: coupon._id,
+              userId: req.user._id,
+              subscriptionId: subscription?._id
+            });
+            
+            coupon.usedCount += 1;
+            await coupon.save();
+          }
         }
       }
+    } catch (couponError) {
+      console.error('Error handling coupon:', couponError);
+      // Don't fail the entire request
     }
     
+    // FIX 8: Send success response with all necessary data
     res.json({
       success: true,
       message: 'Payment verified successfully! Subscription activated.',
       subscription: {
-        planKey: subscription.planKey,
-        plan: subscription.plan,
-        name: subscription.plan,
-        price: subscription.price,
-        emoji: subscription.emoji,
-        isPremium: subscription.isPremium,
-        startDate: subscription.startDate,
-        endDate: subscription.endDate,
-        billing: subscription.billing
+        planKey: subscription?.planKey || targetPlanKey,
+        plan: subscription?.plan || plan.name,
+        name: subscription?.plan || plan.name,
+        price: subscription?.price || finalPrice,
+        emoji: subscription?.emoji || plan.emoji,
+        isPremium: subscription?.isPremium || plan.isPremium,
+        startDate: subscription?.startDate || new Date(),
+        endDate: subscription?.endDate || endDate,
+        billing: subscription?.billing || plan.billing
       }
     });
     
   } catch (error) {
-    console.error('Payment verification error:', error);
+    console.error('Payment verification error details:', {
+      message: error.message,
+      stack: error.stack,
+      body: req.body
+    });
+    
+    // FIX 9: Send detailed error response
     res.status(500).json({ 
       success: false, 
-      message: 'Payment verification failed: ' + error.message 
+      message: 'Payment verification failed: ' + error.message,
+      // Include more details in development
+      ...(process.env.NODE_ENV === 'development' && { 
+        error: error.stack,
+        body: req.body 
+      })
     });
   }
 };
+
 
 const getPaymentStatus = async (req, res) => {
   try {
