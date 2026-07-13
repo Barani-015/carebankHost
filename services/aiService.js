@@ -1,8 +1,6 @@
-
-
 /**
  * CareBank AI Service — Node.js
- * Uses Hugging Face Inference API only.
+ * Uses NVIDIA DeepSeek V4 API only.
  * Falls back to general financial advice if no CSV uploaded.
  */
 
@@ -14,16 +12,22 @@ const fs      = require('fs');
 const path    = require('path');
 const { listUserCSVs, downloadCSV } = require('./csvStorage');
 
+// Import OpenAI using require (CommonJS compatible)
+const OpenAI = require('openai');
+
 const router = express.Router();
 
 // ============================================
 // Configuration
 // ============================================
-// const HF_API_TOKEN  = process.env.HF_TOKEN || '';
-// const HF_MODEL_NAME = 'meta-llama/Llama-3.2-3B-Instruct';
+const NVIDIA_API_KEY = process.env.NVIDIA_API_KEY || '';
+const MODEL_NAME     = 'deepseek-ai/deepseek-v4-pro';
 
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
-const MODEL_NAME     = 'gemini-2.5-flash-lite';
+// Initialize OpenAI with NVIDIA configuration
+const openai = new OpenAI({
+  apiKey: NVIDIA_API_KEY,
+  baseURL: 'https://integrate.api.nvidia.com/v1',
+});
 
 const BASE_DIR          = path.join(__dirname, '..');
 const UPLOAD_CSV_FOLDER = path.join(BASE_DIR, 'uploadsCSVs');
@@ -183,85 +187,70 @@ function buildContext(csvData, question = '') {
 }
 
 // ============================================
-// Hugging Face API
+// DeepSeek V4 API (via NVIDIA)
 // ============================================
-async function queryGemini(prompt) {
+async function queryDeepSeek(prompt) {
     const start = Date.now();
 
-    if (!GEMINI_API_KEY) {
+    // Check for NVIDIA API key
+    if (!NVIDIA_API_KEY) {
         return {
             success:  false,
-            response: 'Gemini API key not configured. Set GEMINI_API_KEY in your .env file.',
+            response: 'NVIDIA API key not configured. Set NVIDIA_API_KEY in your .env file.',
             error:    'missing_token',
-            provider: 'gemini',
+            provider: 'deepseek',
         };
     }
 
-    console.log(`✨ [Gemini] Sending request to ${MODEL_NAME}`);
+    console.log(`✨ [DeepSeek] Sending request to ${MODEL_NAME}`);
     console.log(`   📝 Prompt length: ${prompt.length} chars`);
 
     try {
-        const res = await fetch(
-            `https://generativelanguage.googleapis.com/v1beta/models/${MODEL_NAME}:generateContent?key=${GEMINI_API_KEY}`,
-            {
-                method:  'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    system_instruction: {
-                        parts: [{ text: 'You are a helpful financial data analyst. Answer based on the CSV data accurately and concisely.' }]
-                    },
-                    contents: [{
-                        role: 'user',
-                        parts: [{ text: prompt }]
-                    }],
-                    generationConfig: {
-                        maxOutputTokens: 512,
-                        temperature:     0.1,
-                    },
-                }),
-                signal: AbortSignal.timeout(30_000),
-            }
-        );
+        const completion = await openai.chat.completions.create({
+            model: MODEL_NAME,
+            messages: [
+                {
+                    role: "system",
+                    content: "You are a helpful financial data analyst. Answer based on the CSV data accurately and concisely."
+                },
+                {
+                    role: "user",
+                    content: prompt
+                }
+            ],
+            temperature: 0.1,
+            top_p: 0.95,
+            max_tokens: 512,
+            chat_template_kwargs: { thinking: false },
+            stream: false
+        });
 
         const apiDurationMs = Date.now() - start;
+        const responseText = completion.choices[0]?.message?.content || '';
 
-        if (!res.ok) {
-            const errText = await res.text();
-            console.error(`❌ [Gemini] API Error ${res.status}: ${errText.slice(0, 200)}`);
-            return {
-                success:  false,
-                response: `Gemini API error: ${res.status}`,
-                error:    errText,
-                provider: 'gemini',
-            };
-        }
-
-        const result       = await res.json();
-        const responseText = result.candidates?.[0]?.content?.parts?.[0]?.text || '';
-
-        console.log(`✅ [Gemini] Success — ${apiDurationMs}ms`);
+        console.log(`✅ [DeepSeek] Success — ${apiDurationMs}ms`);
         console.log(`   📥 Response preview: ${responseText.slice(0, 150)}...`);
 
         return {
-            success:      true,
-            response:     responseText,
-            model:        MODEL_NAME,
-            provider:     'gemini',
+            success: true,
+            response: responseText,
+            model: MODEL_NAME,
+            provider: 'deepseek',
             apiDurationMs,
         };
 
     } catch (err) {
         const apiDurationMs = Date.now() - start;
-        const isTimeout     = err.name === 'TimeoutError' || err.name === 'AbortError';
-        console.error(`❌ [Gemini] ${isTimeout ? 'Timeout' : 'Exception'}: ${err.message}`);
+        const isTimeout = err.name === 'TimeoutError' || err.name === 'AbortError';
+        console.error(`❌ [DeepSeek] ${isTimeout ? 'Timeout' : 'Exception'}: ${err.message}`);
 
         return {
-            success:      false,
-            response:     isTimeout
-                ? 'Gemini API timeout. Please try again.'
-                : `Gemini error: ${err.message}`,
-            error:        err.message,
-            provider:     'gemini',
+            success: false,
+            response: isTimeout
+                ? 'DeepSeek API timeout. Please try again.'
+                : `DeepSeek error: ${err.message}`,
+            error: err.message,
+            provider: 'deepseek',
             apiDurationMs,
         };
     }
@@ -306,10 +295,10 @@ async function queryAIWithCSV(userId, question) {
         console.log(`⚠️ No CSV data for user ${userId} — using general mode`);
     }
 
-    // Call HuggingFace
+    // Call DeepSeek
     try {
         const prompt  = `Based on this financial data:\n${context}\n\nAnswer concisely in English: ${question}`;
-        const result  = await queryGemini(prompt);
+        const result  = await queryDeepSeek(prompt);
         const totalMs = Date.now() - totalStart;
 
         console.log('='.repeat(60));
@@ -323,7 +312,7 @@ async function queryAIWithCSV(userId, question) {
             success:        result.success,
             response:       result.response,
             model:          result.model    || MODEL_NAME,
-            provider:       result.provider || 'gemini',
+            provider:       result.provider || 'deepseek',
             userId,
             responseTimeMs: totalMs,
             apiTimeMs:      result.apiDurationMs || 0,
@@ -387,8 +376,8 @@ router.get('/health', (_req, res) => {
         success:                true,
         status:                 'running',
         primary_model:          MODEL_NAME,
-        primary_provider:       'gemini',
-        gemini_configured:      Boolean(GEMINI_API_KEY),
+        primary_provider:       'nvidia-deepseek',
+        nvidia_configured:      Boolean(NVIDIA_API_KEY),
         rag_available:          false,
         timestamp:              new Date().toISOString(),
     });
@@ -411,10 +400,10 @@ router.get('/provider/status', (_req, res) => {
     return res.json({
         success: true,
         primary: {
-            name:       'gemini',
+            name:       'nvidia-deepseek',
             model:      MODEL_NAME,
-            configured: Boolean(GEMINI_API_KEY),
-            available:  Boolean(GEMINI_API_KEY),
+            configured: Boolean(NVIDIA_API_KEY),
+            available:  Boolean(NVIDIA_API_KEY),
         },
     });
 });
@@ -440,7 +429,7 @@ if (require.main === module) {
         console.log('🚀 CareBank AI Service (Node.js)');
         console.log('='.repeat(70));
         console.log(`🤖 Model    : ${MODEL_NAME}`);
-        console.log(`🔑 Token    : ${GEMINI_API_KEY ? '✅ Configured' : '❌ Missing — set GEMINI_API_KEY in .env'}`);
+        console.log(`🔑 NVIDIA Key: ${NVIDIA_API_KEY ? '✅ Configured' : '❌ Missing — set NVIDIA_API_KEY in .env'}`);
         console.log(`💻 Port     : ${PORT}`);
         console.log('='.repeat(70) + '\n');
     });
