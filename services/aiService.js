@@ -60,8 +60,6 @@ function parseCSV(csvText) {
     return rows;
 }
 
-
-
 function splitCSVLine(line) {
     const result = [];
     let current  = '';
@@ -335,63 +333,6 @@ async function queryAIWithCSV(userId, question) {
 // ============================================
 // Routes
 // ============================================
-
-
-// Add this after the existing routes
-router.get('/analyze/:userId', async (req, res) => {
-    const { userId } = req.params;
-    console.log(`🌐 GET /analyze/${userId}`);
-    
-    try {
-        // Get user's transaction data
-        const csvData = await getCachedCSVData(userId);
-        
-        // Analyze the data
-        const analysis = {
-            success: true,
-            userId: userId,
-            totalTransactions: 0,
-            totalDebit: 0,
-            totalCredit: 0,
-            categoryBreakdown: {},
-            monthlySpending: {},
-            trends: {},
-            message: 'Analysis complete'
-        };
-        
-        // Process the CSV data
-        for (const [filename, rows] of Object.entries(csvData)) {
-            analysis.totalTransactions += rows.length;
-            
-            for (const row of rows) {
-                const amount = parseFloat(row.amount) || 0;
-                const type = (row.transaction_type || row.type || '').toLowerCase();
-                
-                if (type === 'debit') {
-                    analysis.totalDebit += amount;
-                } else if (type === 'credit') {
-                    analysis.totalCredit += amount;
-                }
-                
-                // Category breakdown
-                const category = row.category || 'Uncategorized';
-                analysis.categoryBreakdown[category] = (analysis.categoryBreakdown[category] || 0) + amount;
-            }
-        }
-        
-        analysis.netBalance = analysis.totalCredit - analysis.totalDebit;
-        
-        return res.json(analysis);
-        
-    } catch (error) {
-        console.error(`❌ Error analyzing user ${userId}:`, error);
-        return res.status(500).json({
-            success: false,
-            message: error.message || 'Failed to analyze transactions'
-        });
-    }
-});
-
 
 // POST /chat/transaction
 router.post('/chat/transaction', async (req, res) => {
