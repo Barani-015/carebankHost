@@ -14,7 +14,8 @@ const getTransactions = async (req, res) => {
             .populate('fileId', 'originalName uploadDate');
         
         // If requested, also get from GridFS CSV files
-        if (includeFromGridFS === 'true') {
+        // if (includeFromGridFS === 'true') {
+        if (includeFromGridFS === true || includeFromGridFS === 'true') {
             const gridFSTransactions = await getAllUserTransactionsFromGridFS(req.user._id);
             
             // Convert GridFS transactions to match your schema
@@ -58,6 +59,42 @@ const getTransactions = async (req, res) => {
     } catch (error) {
         console.error('Get transactions error:', error);
         res.status(500).json({ success: false, message: 'Server error', error: error.message });
+    }
+};
+
+// Add this to transactionController.js
+const getTransactionSummary = async (req, res) => {
+    try {
+        const userId = req.user._id;
+        
+        // Get all transactions
+        const transactions = await Transaction.find({ userId });
+        
+        let totalRevenue = 0;
+        let totalSpend = 0;
+        
+        transactions.forEach(tx => {
+            if (tx.type === 'credit') {
+                totalRevenue += tx.amount;
+            } else if (tx.type === 'debit') {
+                totalSpend += tx.amount;
+            }
+        });
+        
+        const totalBalance = totalRevenue - totalSpend;
+        const savingsRate = totalRevenue > 0 ? (totalBalance / totalRevenue * 100) : 0;
+        
+        res.json({
+            success: true,
+            revenue: totalRevenue,
+            spend: totalSpend,
+            totalBalance: totalBalance,
+            savingsRate: savingsRate,
+            transactionCount: transactions.length,
+            chartData: await getChartData(userId) // Your chart data function
+        });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
     }
 };
 
